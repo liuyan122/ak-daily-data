@@ -1,0 +1,8 @@
+{
+ "date": "2026-11-17 02:06:49",
+ "groups_ok": 380,
+ "groups_fail": 0,
+ "rows": 86495,
+ "cutoff": "2026-11-02",
+ "file": "data/futures/20261117-02.tsv.gz"
+}
