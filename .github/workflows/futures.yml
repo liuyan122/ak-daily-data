@@ -1,0 +1,40 @@
+name: 期货主连增量更新
+on:
+  schedule:
+    - cron: '50 7 * * 1-5'   # 北京 15:50 日盘收盘
+    - cron: '10 19 * * 1-5'  # 北京 03:10 夜盘收盘
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 抓取并打包增量
+        run: python scripts/futures_update.py
+      - name: 提交数据到仓库
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f futures_summary.json ] && ! grep -q '"skipped": true' futures_summary.json; then
+            git add data/futures/ futures_summary.json
+            git commit -m "期货增量 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')" || echo "无变化"
+            git push
+          else
+            echo "非交易时段，跳过提交"
+          fi
+      - name: 上传 artifact（灵光每日拉取）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: futures-delta-${{ github.run_id }}
+          path: |
+            data/futures/*.tsv.gz
+            futures_summary.json
+          retention-days: 30
