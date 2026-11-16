@@ -167,6 +167,33 @@ def download_one(sym, start, end):
     return []
 
 
+def get_exrights_codes(today):
+    """近15个自然日内除权除息的股票（东财名单），这些股票整段全历史重拉
+    修正前复权基准；接口失败返回空集（本地合并按普通窗口处理）。"""
+    codes = set()
+    try:
+        page = 1
+        floor = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
+        while page <= 30:
+            r = session.get(
+                "https://datacenter-web.eastmoney.com/api/data/v1/get",
+                params={"reportName": "RPT_SHAREBONUS_DET", "columns": "SECURITY_CODE,EX_DIVIDEND_DATE",
+                        "pageSize": 500, "pageNumber": page,
+                        "sortColumns": "EX_DIVIDEND_DATE", "sortTypes": "-1"},
+                timeout=15)
+            rows = ((r.json().get("result") or {}).get("data")) or []
+            if not rows:
+                break
+            for x in rows:
+                d = (x.get("EX_DIVIDEND_DATE") or "")[:10]
+                if d and floor <= d <= today:
+                    codes.add(x["SECURITY_CODE"])
+            page += 1
+    except Exception:
+        log(f"除权名单获取失败，按空集处理: {traceback.format_exc(limit=1)[:120]}")
+    return codes
+
+
 def main():
     today = datetime.now().strftime("%Y-%m-%d")
     if not is_trading_day(today):
@@ -176,13 +203,14 @@ def main():
     end = datetime.now().strftime("%Y%m%d")
     start = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime("%Y%m%d")
     syms = get_stock_list()
-    log(f"清单 {len(syms)} 只，窗口 {start}~{end}")
+    exr = get_exrights_codes(today)
+    log(f"清单 {len(syms)} 只，窗口 {start}~{end}，近15日除权 {len(exr)} 只整段重拉")
     all_rows = {}
     fails = 0
     for i in range(0, len(syms), BATCH):
         batch = syms[i:i + BATCH]
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            futures = {pool.submit(download_one, s, start, end): s for s in batch}
+            futures = {pool.submit(download_one, s, "19901219" if s in exr else start, end): s for s in batch}
             for fu in as_completed(futures):
                 try:
                     rows = fu.result()
@@ -208,7 +236,8 @@ def main():
     dates = sorted({r[1] for r in rows})
     summary = {"date": today, "symbols_ok": ok, "symbols_fail": fails,
                "rows": len(rows), "min_date": dates[0] if dates else None,
-               "max_date": dates[-1] if dates else None, "file": out_gz}
+               "max_date": dates[-1] if dates else None, "file": out_gz,
+               "replace_full": sorted(exr)}
     json.dump(summary, open("update_summary.json", "w"), ensure_ascii=False, indent=1)
     log(f"写出 {out_gz}: {len(rows)} 行, 日期 {dates[0]}~{dates[-1]}")
     return 0
