@@ -1,0 +1,41 @@
+name: A股日线增量更新
+on:
+  schedule:
+    - cron: '15 9 * * 1-5'   # 北京时间每交易日 17:15
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+      - name: 下载并打包增量
+        run: python scripts/kline_update.py
+      - name: 提交数据到仓库
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -f update_summary.json ] && ! grep -q '"skipped": true' update_summary.json; then
+            git add data/ update_summary.json
+            git commit -m "日线增量 $(date -u -d '+8 hours' +%Y-%m-%d)" || echo "无变化"
+            git push
+          else
+            echo "非交易日，跳过提交"
+          fi
+      - name: 上传 artifact（灵光每日拉取）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kline-delta-${{ github.run_id }}
+          path: |
+            data/*.tsv.gz
+            update_summary.json
+          retention-days: 30
