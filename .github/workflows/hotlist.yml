@@ -18,27 +18,22 @@ jobs:
       - run: pip install -r requirements.txt
       - name: 抓取热榜并生成快照
         run: python scripts/hotlist.py
-      - name: 复制历史归档
-        run: |
-          mkdir -p docs-archive/history
-          cp -r docs/history/* docs-archive/history/ 2>/dev/null || true
-      - name: 推送 GitHub Pages
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git clone --depth 1 --branch gh-pages ${{ github.server_url }}/${{ github.repository }} gh-pages-repo 2>/dev/null || (git init gh-pages-repo && cd gh-pages-repo && git checkout -b gh-pages)
-          cd gh-pages-repo
-          git rm -rf . 2>/dev/null || true
-          cp -r ../docs/* .
-          git add -A
-          git commit -m "热榜快照 $(date -u -d '+8 hours' +%Y-%m-%d\ %H:%M)" || echo "无变化"
-          git push origin gh-pages
-      - name: 保留每日归档（提交到 main）
+      - name: 每日归档提交到 main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           mkdir -p archive
-          cp -r docs/history/* archive/ 2>/dev/null || true
+          cp docs/history/*.json archive/ 2>/dev/null || true
           git add archive/
-          git commit -m "热榜归档 $(date -u -d '+8 hours' +%Y-%m-%d)" || echo "无归档变化"
+          git commit -m "热榜归档 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')" || echo "无归档变化"
           git push
+      - name: 推送 GitHub Pages
+        run: |
+          git remote add pages https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          cp -r docs /tmp/docs
+          git checkout -B gh-pages main
+          git rm -rf .
+          cp -r /tmp/docs/* .
+          git add -A
+          git commit -m "热榜快照 $(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')"
+          git push --force pages gh-pages
