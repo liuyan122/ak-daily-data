@@ -12,16 +12,22 @@
 
 说明：不含天勤补充（天勤需账号）。新浪 1d 当日根若未发布，夜盘那轮
 （北京 03:10）会带出，本地库次日自动补齐，不丢数据。
+
+并行：2026-11-18 起 380 组请求改小规模线程池并发（FUT_WORKERS 可调，
+默认 5），单线程串行约 10+ 分钟，压缩到 3~5 分钟；并发度刻意压低，
+避免触发新浪免费源限频。
 """
 import gzip
 import json
 import os
 import re
 import sys
+import threading
 import time
 import traceback
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 CN_TZ = timezone(timedelta(hours=8))
@@ -35,6 +41,8 @@ API_DAY = ("https://stock2.finance.sina.com.cn/futures/api/jsonp.php"
 OUT_DIR = os.environ.get("OUT_DIR", "data/futures")
 LOOKBACK_DAYS = 15
 MIN_OK_RATIO = 0.85
+WORKERS = max(1, int(os.environ.get("FUT_WORKERS", "5")))
+PER_CALL_DELAY = float(os.environ.get("FUT_CALL_DELAY", "0.05"))
 
 SYMBOLS = sorted([
     "A0", "AD0", "AG0", "AL0", "AO0", "AP0", "AU0", "B0", "BC0", "BR0",
@@ -50,7 +58,7 @@ TIMEFRAMES = {"5m": "5", "15m": "15", "30m": "30", "60m": "60", "1d": "daily"}
 
 
 def log(msg):
-    print(f"{NOW:%H:%M:%S} {msg}", flush=True)
+    print(f"{datetime.now(CN_TZ):%H:%M:%S} {msg}", flush=True)
 
 
 def http_json(api, params):
@@ -67,7 +75,7 @@ def http_json(api, params):
 
 def is_active_session(today: str, yesterday: str) -> bool:
     """交易日守卫：腾讯 sh000001 快照日期在今昨两天窗口内即有效
-    （日盘 15:50 跑 -> 快照=今天；夜盘 03:10 跑 -> 快照=昨天）"""
+    （日盘跑 -> 快照=今天；凌晨跑 -> 快照=昨天）"""
     try:
         import codecs
         req = urllib.request.Request(
@@ -95,6 +103,39 @@ def fetch_bars(sym, tf, now_str, today):
             for it in rows if it["d"] <= now_str]
 
 
+def fetch_all_parallel(now_str, today):
+    """线程池并发抓 76 品种 x 5 周期；失败不中断，汇总错误清单。"""
+    tasks = [(sym, tf) for sym in SYMBOLS for tf in TIMEFRAMES]
+    total = len(tasks)
+    results = []
+    errors = []
+    counter = {"done": 0, "ok": 0, "fail": 0}
+    lock = threading.Lock()
+
+    def work(item):
+        sym, tf = item
+        try:
+            time.sleep(PER_CALL_DELAY)
+            bars = fetch_bars(sym, tf, now_str, today)
+            return sym, tf, bars, None
+        except Exception as e:
+            return sym, tf, None, e
+
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for sym, tf, bars, err in pool.map(work, tasks):
+            with lock:
+                counter["done"] += 1
+                if err is None:
+                    results.extend((sym, tf, *b) for b in bars)
+                    counter["ok"] += 1
+                else:
+                    errors.append(f"{sym}.{tf}: {err}")
+                    counter["fail"] += 1
+                if counter["done"] % 76 == 0 or counter["done"] == total:
+                    log(f"进度 {counter['done']}/{total} 成功{counter['ok']} 失败{counter['fail']}")
+    return counter["ok"], counter["fail"], results, errors
+
+
 def main():
     today = NOW.strftime("%Y-%m-%d")
     yesterday = (NOW - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -105,23 +146,10 @@ def main():
                   open("futures_summary.json", "w"), ensure_ascii=False)
         return 0
 
+    t0 = time.time()
     cutoff_ts = (NOW - timedelta(days=LOOKBACK_DAYS)).strftime("%Y-%m-%d")
-    ok = fail = 0
-    all_rows = []
-    errors = []
-    for idx, sym in enumerate(SYMBOLS):
-        for tf in TIMEFRAMES:
-            try:
-                bars = fetch_bars(sym, tf, now_str, today)
-                all_rows.extend((sym, tf, *b) for b in bars)
-                ok += 1
-                time.sleep(0.15)
-            except Exception:
-                fail += 1
-                errors.append(f"{sym}.{tf}")
-        if idx % 19 == 0:
-            log(f"进度 {idx + 1}/{len(SYMBOLS)} 成功{ok} 失败{fail}")
-    log(f"抓取完成: 成功 {ok} 组, 失败 {fail}")
+    ok, fail, all_rows, errors = fetch_all_parallel(now_str, today)
+    log(f"抓取完成: 成功 {ok} 组, 失败 {fail}, 耗时 {time.time() - t0:.0f}s")
     if ok < len(SYMBOLS) * len(TIMEFRAMES) * MIN_OK_RATIO:
         log("成功率过低，判失败")
         if errors:
@@ -136,7 +164,8 @@ def main():
         for r in delta:
             f.write("\t".join("" if v is None else str(v) for v in r) + "\n")
     summary = {"date": now_str, "groups_ok": ok, "groups_fail": fail,
-               "rows": len(delta), "cutoff": cutoff_ts, "file": out_gz}
+               "rows": len(delta), "cutoff": cutoff_ts, "file": out_gz,
+               "elapsed_sec": round(time.time() - t0)}
     json.dump(summary, open("futures_summary.json", "w"), ensure_ascii=False, indent=1)
     log(f"写出 {out_gz}: {len(delta):,} 行 (ts>={cutoff_ts})")
     return 0
