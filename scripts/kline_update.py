@@ -38,6 +38,10 @@ EM_HOSTS = ["https://push2his.eastmoney.com",
             "http://push2his.eastmoney.com"]
 EM_SECID = {"sh": "1.", "sz": "0."}
 TX_URL = "http://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+SINA_LIST_URL = ("https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+                 "Market_Center.getHQNodeData")
+SINA_REF = "https://finance.sina.com.cn"
+EM_DISABLED = False   # 探测东财不可达时置 True，全部直落腾讯源
 
 session = requests.Session()
 session.headers.update({"User-Agent": UA})
@@ -90,8 +94,37 @@ def get_stock_list():
         page += 1
         time.sleep(0.2)
     syms = sorted(set(syms))
-    if len(syms) < 4000:
-        raise RuntimeError(f"股票清单异常（仅 {len(syms)} 只）")
+    if len(syms) >= 4000:
+        return syms
+    log(f"东财清单不可用（仅 {len(syms)} 只），改用新浪 hs_a 备源")
+    syms2 = get_stock_list_sina()
+    if len(syms2) < 4000:
+        raise RuntimeError(f"股票清单异常（东财 {len(syms)} / 新浪 {len(syms2)} 只）")
+    return syms2
+
+
+def get_stock_list_sina():
+    """新浪 hs_a 节点分页拉沪深A股（沙箱扫描同源；东财 clist 被拦时兜底）。"""
+    syms, page = [], 1
+    while page <= 120:
+        try:
+            r = session.get(SINA_LIST_URL,
+                            params={"page": page, "num": 100, "sort": "code",
+                                    "asc": 1, "node": "hs_a"},
+                            headers={"Referer": SINA_REF}, timeout=15)
+            arr = r.json()
+        except Exception:
+            break
+        if not arr:
+            break
+        for it in arr:
+            code = str(it.get("code", ""))
+            if len(code) == 6 and code.isdigit() and code[:2] in ("60", "68", "00", "30"):
+                syms.append(code)
+        page += 1
+        time.sleep(0.15)
+    syms = sorted(set(syms))
+    log(f"新浪清单 {len(syms)} 只")
     return syms
 
 
@@ -116,6 +149,8 @@ def _em_get(params, attempts=5):
 
 
 def download_one_em(sym, start, end):
+    if EM_DISABLED:
+        raise RuntimeError("EM disabled")
     s = sina_symbol(sym)
     params = {"secid": EM_SECID.get(s[:2], "1.") + s[2:], "klt": "101", "fqt": "1",
               "fields1": "f1,f2,f3,f4,f5,f6",
@@ -200,6 +235,15 @@ def main():
         log(f"{today} 非A股交易日，退出")
         json.dump({"skipped": True, "date": today}, open("update_summary.json", "w"), ensure_ascii=False)
         return 0
+    global EM_DISABLED
+    try:
+        _em_get({"secid": "1.000001", "klt": "101", "fqt": "1",
+                 "fields1": "f1,f2,f3", "fields2": "f51,f53",
+                 "beg": "20260101", "end": "20260110"}, attempts=2)
+        log("东财接口探测可用")
+    except Exception as e:
+        EM_DISABLED = True
+        log(f"东财接口探测失败（{type(e).__name__}），本次全部直落腾讯源")
     end = datetime.now().strftime("%Y%m%d")
     start = (datetime.now() - timedelta(days=LOOKBACK_DAYS)).strftime("%Y%m%d")
     syms = get_stock_list()
