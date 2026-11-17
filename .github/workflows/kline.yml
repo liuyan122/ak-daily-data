@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '20 7 * * 1-5'   # 北京时间每交易日 15:20 收盘后下载，灵光15:50拉取合并
   workflow_dispatch:
+    inputs:
+      commit_data:
+        description: '手动运行时是否提交 data/ 增量（默认不提交，仅测试打包）'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -20,6 +25,7 @@ jobs:
       - name: 下载并打包增量
         run: python scripts/kline_update.py
       - name: 提交数据到仓库
+        if: ${{ github.event_name == 'schedule' || inputs.commit_data }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -30,6 +36,18 @@ jobs:
           else
             echo "非交易日，跳过提交"
           fi
+      - name: 打包近一年全量窗口
+        if: always()
+        continue-on-error: true
+        run: python scripts/full_year_pack.py
+      - name: 提交全量包状态
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add full_pack_summary.json || true
+          git diff --cached --quiet || git commit -m "全量包状态 $(date -u -d '+8 hours' +%Y-%m-%d)" || true
+          git push || true
       - name: 上传 artifact（灵光每日拉取）
         if: always()
         uses: actions/upload-artifact@v4
@@ -39,3 +57,30 @@ jobs:
             data/*.tsv.gz
             update_summary.json
           retention-days: 30
+      - name: 上传全量包到 Release
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f data/full_year.tsv.gz ]; then echo "无全量包（非交易日或打包失败），跳过上传"; exit 0; fi
+          D=$(date -u -d '+8 hours' +%Y%m%d)
+          cp data/full_year.tsv.gz /tmp/kline-full-year.tsv.gz
+          cp data/full_year.tsv.gz /tmp/kline-full-year-${D}.tsv.gz
+          gh release view full-year -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create full-year -R "$GITHUB_REPOSITORY" \
+              --title "近一年全量K线窗口（每日覆盖）" \
+              --notes "自动生成：固定名 kline-full-year.tsv.gz 每日覆盖；带日期包保留最近3个交易日。勿手工修改。"
+          gh release upload full-year -R "$GITHUB_REPOSITORY" \
+            /tmp/kline-full-year.tsv.gz /tmp/kline-full-year-${D}.tsv.gz --clobber
+          echo "清理3天前的带日期旧包..."
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/full-year" --jq '.assets[].name' > /tmp/assets.txt
+          while read -r a; do
+            case "$a" in
+              kline-full-year-????????.tsv.gz)
+                d=${a#kline-full-year-}; d=${d%.tsv.gz}
+                age=$(( ( $(date -u +%s) - $(date -u -d "${d:0:4}-${d:4:2}-${d:6:2}" +%s) ) / 86400 ))
+                if [ "$age" -gt 3 ]; then
+                  gh release delete-asset full-year -R "$GITHUB_REPOSITORY" "$a" -y && echo "已删旧包 $a"
+                fi ;;
+            esac
+          done < /tmp/assets.txt
