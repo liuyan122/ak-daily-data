@@ -53,7 +53,7 @@ def is_trading_day(today: str) -> bool:
                         headers={"Referer": "https://gu.qq.com/"})
         r.encoding = "gbk"
         f = r.text.split('="')[1].split("~")
-        return f[30].startswith(today)
+        return f[30].startswith(today.replace("-", ""))
     except Exception:
         # 探测失败时不拦：按交易日继续，后续下载若全部为空会自然退出
         log(f"交易日探测失败，按交易日继续: {traceback.format_exc(limit=1)[:120]}")
