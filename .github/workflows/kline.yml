@@ -1,7 +1,5 @@
 name: A股日线增量更新
 on:
-  schedule:
-    - cron: '20 7 * * 1-5'   # 北京时间每交易日 15:20 收盘后下载，灵光15:50拉取合并
   workflow_dispatch:
     inputs:
       commit_data:
