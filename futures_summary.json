@@ -1,8 +1,9 @@
 {
- "date": "2026-11-18 00:06:27",
+ "date": "2026-11-18 01:39:15",
  "groups_ok": 380,
  "groups_fail": 0,
- "rows": 86510,
+ "rows": 86628,
  "cutoff": "2026-11-03",
- "file": "data/futures/20261118-00.tsv.gz"
+ "file": "data/futures/20261118-01.tsv.gz",
+ "elapsed_sec": 118
 }
