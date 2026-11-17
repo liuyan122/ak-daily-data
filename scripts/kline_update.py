@@ -66,7 +66,8 @@ def is_trading_day(today: str) -> bool:
 
 def get_stock_list():
     syms, total, page = [], None, 1
-    while True:
+    em_broken = False
+    while not em_broken:
         rows = []
         for attempt in range(3):
             try:
@@ -83,7 +84,7 @@ def get_stock_list():
                 break
             except Exception:
                 if attempt == 2:
-                    raise
+                    em_broken = True
                 time.sleep(3)
         codes = [d["f12"] for d in rows if not d["f12"].startswith(("4", "8", "92"))]
         if not codes:
