@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   update:
@@ -20,22 +21,41 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'   # 依赖缓存：requirements 未变时直接走本地缓存
       - name: 安装依赖
         run: pip install -r requirements.txt
       - name: 下载并打包增量
         run: python scripts/kline_update.py
-      - name: 提交数据到仓库
+      - name: 检查是否有增量
+        id: delta
         if: ${{ github.event_name == 'schedule' || inputs.commit_data }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -f update_summary.json ] && ! grep -q '"skipped": true' update_summary.json; then
-            git add data/ update_summary.json
-            git commit -m "日线增量 $(date -u -d '+8 hours' +%Y-%m-%d)" || echo "无变化"
-            git push
+          if [ -f update_summary.json ] && grep -q '"skipped": true' update_summary.json; then
+            echo "has_data=false" >> "$GITHUB_OUTPUT"
+            echo "非交易日，跳过数据提交"
           else
-            echo "非交易日，跳过提交"
+            echo "has_data=true" >> "$GITHUB_OUTPUT"
+            echo "today=$(date -u -d '+8 hours' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
           fi
+      - name: 数据增量走 PR（留变更记录，便于回滚）
+        id: cpr
+        if: ${{ steps.delta.outputs.has_data == 'true' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: |
+            data/
+            update_summary.json
+          commit-message: "日线增量 ${{ steps.delta.outputs.today }}"
+          title: "日线增量 ${{ steps.delta.outputs.today }}"
+          body: "收盘后自动打包的日线增量数据，合并后供下游 15:50 拉取。"
+          branch: "data/kline-${{ steps.delta.outputs.today }}"
+          delete-branch: true
+      - name: 合并数据 PR
+        if: ${{ steps.cpr.outputs.pull-request-number != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ steps.cpr.outputs.pull-request-number }} --merge --delete-branch --repo "$GITHUB_REPOSITORY"
       - name: 打包近一年全量窗口
         if: always()
         continue-on-error: true
