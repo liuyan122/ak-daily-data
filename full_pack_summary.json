@@ -1,9 +1,9 @@
 {
  "ok": true,
  "date": "2026-11-17",
- "symbols_ok": 4999,
- "symbols_fail": 300,
- "rows": 1632898,
+ "symbols_ok": 5259,
+ "symbols_fail": 305,
+ "rows": 1718729,
  "min_date": "2025-07-07",
  "max_date": "2026-11-17",
  "file": "data/full_year.tsv.gz"
