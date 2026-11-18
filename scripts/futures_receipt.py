@@ -201,22 +201,67 @@ def fetch_czce(ymd):
     return dedup
 
 
+DCE_CODES = ["A", "B", "C", "CS", "LH", "LG", "BZ", "EB", "EG", "JD", "I", "J",
+             "JM", "L", "M", "Y", "P", "V", "PP", "RR", "FB", "BB", "PG"]
+CZCE_CODES = ["RM", "OI", "CF", "TA", "PX", "SR", "MA", "FG", "PF", "PR",
+              "SA", "SH", "CY", "AP", "CJ", "UR", "PK"]
+
+
+def fetch_em(ymd, market, codes):
+    """东财统一库存接口备援（datacenter-web RPT_FUTU_STOCKDATA，全所主码覆盖）。
+    官方接口被数据中心 IP 风控时启用（DCE/CZCE 实测 412）。单位：DCE 手 / CZCE 张。"""
+    from datetime import datetime as _dt
+    import urllib.parse
+    d0 = (_dt.strptime(ymd, "%Y%m%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+    rows = []
+    for code in codes:
+        p = {"reportName": "RPT_FUTU_STOCKDATA",
+             "columns": "SECURITY_CODE,TRADE_DATE,ON_WARRANT_NUM,ADDCHANGE",
+             "filter": f'(SECURITY_CODE="{code}")(TRADE_DATE>=\'{d0}\')',
+             "pageNumber": "1", "pageSize": "20", "sortTypes": "-1",
+             "sortColumns": "TRADE_DATE", "source": "WEB", "client": "WEB"}
+        url = "https://datacenter-web.eastmoney.com/api/data/v1/get?" + urllib.parse.urlencode(p)
+        ctx = _http_json(url, headers={"User-Agent": UA, "Referer": "https://data.eastmoney.com/"})
+        result = (ctx or {}).get("result")
+        data_rows = result.get("data") if isinstance(result, dict) else None
+        for r in data_rows or []:
+            if not isinstance(r, dict):
+                continue
+            day = str(r.get("TRADE_DATE", ""))[:10].replace("-", "")
+            if day != ymd:
+                continue
+            try:
+                qty = int(float(r["ON_WARRANT_NUM"])); chg = int(float(r.get("ADDCHANGE") or 0))
+            except (TypeError, ValueError):
+                continue
+            rows.append((market, code, qty, chg))
+        time.sleep(0.3)
+    return rows
+
+
 def main():
     ymd = sys.argv[1] if len(sys.argv) > 1 else NOW.strftime("%Y%m%d")
     os.makedirs(OUT_DIR, exist_ok=True)
     results, rows_all, summary = {}, [], {"date": ymd, "markets": {}, "skipped": False}
-    for name, fn in (("SHFE", fetch_shfe_ine), ("DCE", fetch_dce),
-                     ("GFEX", fetch_gfex), ("CZCE", fetch_czce)):
+    for name, fn, em_codes in (("SHFE", fetch_shfe_ine, None), ("DCE", fetch_dce, DCE_CODES),
+                               ("GFEX", fetch_gfex, None), ("CZCE", fetch_czce, CZCE_CODES)):
         t0 = time.time()
         try:
             rows = fn(ymd)
         except Exception as e:  # noqa
             print(f"  [warn] {name} 采集异常: {e}")
             rows = []
+        source = "direct"
+        if not rows and em_codes:  # 直连被风控 → 东财备援
+            try:
+                rows = fetch_em(ymd, name, em_codes)
+                source = "eastmoney"
+            except Exception as e:  # noqa
+                print(f"  [warn] {name} 东财备援异常: {e}")
         results[name] = rows
-        summary["markets"][name] = {"rows": len(rows), "ok": len(rows) > 0,
+        summary["markets"][name] = {"rows": len(rows), "ok": len(rows) > 0, "source": source,
                                     "elapsed_sec": round(time.time() - t0, 1)}
-        print(f"{name}: {len(rows)} 只品种, {summary['markets'][name]['elapsed_sec']}s")
+        print(f"{name}: {len(rows)} 只品种 [{source}], {summary['markets'][name]['elapsed_sec']}s")
         rows_all.extend(rows)
         time.sleep(1)
     if not rows_all:
