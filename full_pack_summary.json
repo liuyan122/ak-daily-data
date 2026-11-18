@@ -1,10 +1,10 @@
 {
  "ok": true,
- "date": "2026-11-17",
+ "date": "2026-11-18",
  "symbols_ok": 5259,
- "symbols_fail": 305,
- "rows": 1718729,
+ "symbols_fail": 306,
+ "rows": 1723946,
  "min_date": "2025-07-07",
- "max_date": "2026-11-17",
+ "max_date": "2026-11-18",
  "file": "data/full_year.tsv.gz"
 }
