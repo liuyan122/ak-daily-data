@@ -1,6 +1,11 @@
 name: 期货仓单日频采集
 on:
   workflow_dispatch:
+    inputs:
+      date:
+        description: "采集日期 YYYYMMDD，默认今天"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -14,7 +19,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: 采集各所仓单
-        run: python scripts/futures_receipt.py
+        run: python scripts/futures_receipt.py ${{ github.event.inputs.date }}
       - name: 提交数据到仓库
         run: |
           git config user.name "github-actions[bot]"
