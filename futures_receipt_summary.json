@@ -1,27 +1,27 @@
 {
- "date": "20261119",
+ "date": "20261118",
  "markets": {
   "SHFE": {
-   "rows": 0,
-   "ok": false,
-   "elapsed_sec": 2.1
+   "rows": 21,
+   "ok": true,
+   "elapsed_sec": 2.5
   },
   "DCE": {
    "rows": 0,
    "ok": false,
-   "elapsed_sec": 15.7
+   "elapsed_sec": 13.9
   },
   "GFEX": {
-   "rows": 0,
-   "ok": false,
-   "elapsed_sec": 2.6
+   "rows": 3,
+   "ok": true,
+   "elapsed_sec": 1.1
   },
   "CZCE": {
    "rows": 0,
    "ok": false,
-   "elapsed_sec": 2.5
+   "elapsed_sec": 2.3
   }
  },
- "skipped": true,
- "rows": 0
+ "skipped": false,
+ "rows": 24
 }
