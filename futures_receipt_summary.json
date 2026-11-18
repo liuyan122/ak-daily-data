@@ -1,0 +1,27 @@
+{
+ "date": "20261119",
+ "markets": {
+  "SHFE": {
+   "rows": 0,
+   "ok": false,
+   "elapsed_sec": 2.1
+  },
+  "DCE": {
+   "rows": 0,
+   "ok": false,
+   "elapsed_sec": 15.7
+  },
+  "GFEX": {
+   "rows": 0,
+   "ok": false,
+   "elapsed_sec": 2.6
+  },
+  "CZCE": {
+   "rows": 0,
+   "ok": false,
+   "elapsed_sec": 2.5
+  }
+ },
+ "skipped": true,
+ "rows": 0
+}
