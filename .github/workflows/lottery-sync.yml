@@ -2,8 +2,6 @@ name: lottery-sync
 # 彩票存档自动同步：上游更新则静默跟进；上游清库则保留本地存档，不跟随删除；不发通知。
 
 on:
-  schedule:
-    - cron: '40 21 * * *'   # 北京时间每天 05:40
   workflow_dispatch: {}
 
 permissions:
