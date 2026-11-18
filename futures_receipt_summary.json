@@ -4,24 +4,28 @@
   "SHFE": {
    "rows": 21,
    "ok": true,
+   "source": "direct",
    "elapsed_sec": 2.5
   },
   "DCE": {
-   "rows": 0,
-   "ok": false,
-   "elapsed_sec": 13.9
+   "rows": 18,
+   "ok": true,
+   "source": "eastmoney",
+   "elapsed_sec": 52.6
   },
   "GFEX": {
    "rows": 3,
    "ok": true,
-   "elapsed_sec": 1.1
+   "source": "direct",
+   "elapsed_sec": 1.2
   },
   "CZCE": {
-   "rows": 0,
-   "ok": false,
-   "elapsed_sec": 2.3
+   "rows": 16,
+   "ok": true,
+   "source": "eastmoney",
+   "elapsed_sec": 21.7
   }
  },
  "skipped": false,
- "rows": 24
+ "rows": 58
 }
