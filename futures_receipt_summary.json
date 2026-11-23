@@ -1,29 +1,29 @@
 {
- "date": "20261120",
+ "date": "20261123",
  "markets": {
   "SHFE": {
    "rows": 21,
    "ok": true,
    "source": "direct",
-   "elapsed_sec": 2.0
+   "elapsed_sec": 3.3
   },
   "DCE": {
    "rows": 18,
    "ok": true,
    "source": "eastmoney",
-   "elapsed_sec": 40.3
+   "elapsed_sec": 28.7
   },
   "GFEX": {
    "rows": 3,
    "ok": true,
    "source": "direct",
-   "elapsed_sec": 5.1
+   "elapsed_sec": 1.7
   },
   "CZCE": {
    "rows": 16,
    "ok": true,
    "source": "eastmoney",
-   "elapsed_sec": 17.4
+   "elapsed_sec": 18.0
   }
  },
  "skipped": false,
