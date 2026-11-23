@@ -1,9 +1,9 @@
 {
- "date": "2026-11-20 16:00:12",
- "groups_ok": 379,
- "groups_fail": 1,
- "rows": 91088,
- "cutoff": "2026-11-05",
- "file": "data/futures/20261120-16.tsv.gz",
- "elapsed_sec": 144
+ "date": "2026-11-23 16:00:11",
+ "groups_ok": 380,
+ "groups_fail": 0,
+ "rows": 84034,
+ "cutoff": "2026-11-08",
+ "file": "data/futures/20261123-16.tsv.gz",
+ "elapsed_sec": 132
 }
